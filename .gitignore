@@ -1,0 +1,11 @@
+build/
+
+# Generated ROOT data products.
+*.root
+
+# Local Codex/agent metadata.
+.agents/
+.codex/
+
+# Local review smoke-test outputs.
+review/logs/

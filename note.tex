@@ -1,0 +1,1005 @@
+\documentclass[11pt,a4paper,UTF8]{ctexart}
+\usepackage{amsmath, amssymb}
+\usepackage{geometry}
+\geometry{margin=1.8cm}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multicol}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{verbatim}
+\usepackage{calc}
+
+\setlength{\headheight}{15pt}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2pt}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    backgroundcolor=\color{gray!5}
+}
+
+\pagestyle{fancy}
+\lhead{$\rho'$ UPC 事件生成}
+\rhead{学生笔记}
+\cfoot{\thepage}
+
+\title{\textbf{\huge $\rho'$(1450) $\to \rho^0 \sigma \to 4\pi$ \\ UPC 事件生成与分析} \\ \Large 物理原理与代码实现完整说明}
+\author{CMS UPC 小组}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+本文档从物理原理出发，详细说明 $\rho'(1450) \to \rho^0 \sigma \to \pi^+\pi^-\pi^+\pi^-$ 在 Pb-Pb 超周边碰撞 (UPC) 中的完整模拟流程。内容包括：等效光子近似、矢量介子主导模型、双源量子相干、Glauber 吸收修正、$\rho'$ 质量分布参数化、玻色对称化衰变、蒙特卡洛事件生成和自旋对齐分析。每步都给出物理推导、公式和对应的代码实现细节。
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{什么是 UPC？为什么要研究它？}
+
+\subsection{超周边碰撞的基本图像}
+
+在重离子碰撞中，当两个原子核的碰撞参数 $b$（两核中心在横向平面上的距离）大于两核半径之和时，它们不会发生强子碰撞，但仍然可以通过电磁相互作用产生粒子。这就是超周边碰撞 (Ultra-Peripheral Collision, UPC)。
+
+\[
+\text{Pb} + \text{Pb} \xrightarrow{b > 2R} \text{Pb} + \text{Pb} + X
+\]
+
+其中 $X$ 是电磁过程产生的粒子系统。
+
+\subsection{为什么 UPC 是干净的量子实验室？}
+
+\begin{enumerate}[leftmargin=2em]
+    \item \textbf{无强子背景}：$b > 2R$ 保证两核不重叠，没有强子碎片污染信号。
+    \item \textbf{光子能量高}：Pb 核电荷 $Z=82$，等效光子通量 $\propto Z^2 \approx 6700$，远超强子过程。
+    \item \textbf{双源相干}：两个核都是光子源，光子波函数相干叠加，产生干涉条纹。
+    \item \textbf{探测完整系统}：两核保持完整，可以在零度量热器中探测中子蒸发来标记碰撞参数。
+\end{enumerate}
+
+\subsection{我们研究什么过程？}
+
+\[
+\gamma \gamma \to \rho'(1450) \to \rho^0(770) \sigma \to \pi^+\pi^-\pi^+\pi^-
+\]
+
+$\rho'(1450)$ 是 $\rho(770)$ 的第一径向激发态，质量约 1.45 GeV。它通过 $\rho^0 \sigma$ 中间态衰变到 $4\pi$。同时，双 $\rho^0$ 产生过程 $\gamma\gamma \to \rho^0\rho^0 \to 4\pi$ 在相同运动学区域存在，两者产生量子干涉。
+
+\section{等效光子近似}
+
+\subsection{物理图像}
+
+高速运动的带电粒子产生横向电磁场。在 Lorentz 收缩下，这个场看起来像一束光子脉冲。我们可以把运动核的电磁场等价为一束光子。
+
+\subsection{等效光子谱}
+
+一个以 Lorentz 因子 $\gamma_L$ 运动的电荷 $Z$ 产生的等效光子数为：
+
+\[
+\frac{dn(\omega)}{d\omega} = \frac{2Z^2\alpha}{\pi^2\omega} \int_{r_{\text{min}}}^{\infty} dr \, r \left| \vec{\mathcal{E}}(\omega, r) \right|^2
+\]
+
+其中 $\omega$ 是光子能量，$\vec{\mathcal{E}}$ 是电场振幅。
+
+\subsection{核形状因子修正}
+
+点电荷的电场在 $r \to 0$ 时发散。实际核有有限尺寸，用核形状因子截断。代码中使用核半径 $R_A$ 作为截断：
+
+\[
+\mathcal{E}(\omega, r) = \begin{cases}
+\displaystyle \frac{\xi K_1(\xi)}{r} & r \ge R_A \\
+\displaystyle \frac{\xi_R K_1(\xi_R)}{R_A} \cdot \frac{r}{R_A} & r < R_A
+\end{cases}
+\]
+
+其中：
+\[
+\xi = \frac{\omega r}{\gamma_L \hbar c}, \quad \xi_R = \frac{\omega R_A}{\gamma_L \hbar c}
+\]
+
+$K_1$ 是第一类修正贝塞尔函数。当 $\xi \ge 20$ 时截断为 0（指数衰减）。
+
+\subsection{代码实现：\texttt{CalcPhotonField}}
+
+\begin{verbatim}
+double CalcPhotonField(double omega, double r, 
+                       double gamma_L, double R_A) {
+    double xi = omega * r / (gamma_L * hbar_c);
+    if (xi >= 20.0) return 0.0;
+    if (r >= R_A) 
+        return xi * BesselK1(xi) / r;
+    double xi_R = omega * R_A / (gamma_L * hbar_c);
+    return (xi_R * BesselK1(xi_R) / R_A) * (r / R_A);
+}
+\end{verbatim}
+
+\section{矢量介子主导模型}
+
+\subsection{物理思想}
+
+光子如何变成 $\rho'$？通过 VMD 机制：光子与矢量介子混合。
+
+\[
+|\gamma\rangle = \left| \gamma_{\text{bare}} \right\rangle + \sum_V \frac{e}{f_V} |V\rangle
+\]
+
+其中 $f_V$ 是矢量介子的衰变常数。对于 $\rho$：
+\[
+\frac{f_\rho^2}{4\pi} = 8.4
+\]
+
+\subsection{从 $\sigma_{\gamma p}$ 到 $\sigma_{Vp}$}
+
+VMD 给出光子-核子截面和矢量介子-核子截面的关系：
+
+\[
+\frac{d\sigma_{Vp}}{dt}\bigg|_{t=0} = b_V \cdot \sigma_{\gamma p}(W)
+\]
+
+其中 $b_V = 9.4$ GeV$^{-2}$ 是斜率参数，$W$ 是 $\gamma p$ 质心能量。
+
+\subsection{$\gamma p$ 截面参数化}
+
+代码使用双幂律参数化（Saito 模型）：
+
+\[
+\sigma_{\gamma p}(W) = \frac{0.1}{\mathcal{B}_{4\pi}} \left( x_p W^\epsilon + y_p W^{-\eta} \right) \quad \text{(mb)}
+\]
+
+参数：$x_p = 0.00026$, $\epsilon = 0.28$, $y_p = 0.02078$, $\eta = 1.21$。
+其中 $\mathcal{B}_{4\pi} = 0.2$ 是 $\rho' \to 4\pi$ 分支比，因子 0.1 是 GeV$^{-2}$ 到 mb 的转换。
+
+阈值：$W > 4m_\pi + m_p = 0.558 + 0.938 = 1.496$ GeV。
+
+\subsection{矢量介子-核子总截面}
+
+通过光学定理：
+
+\[
+\sigma_{Vp}^{\text{tot}}(W) = \sqrt{16\pi (\hbar c)^2 \frac{d\sigma_{Vp}}{dt}\bigg|_{t=0} \frac{f_V^2/4\pi}{\alpha}}
+\]
+
+代码中 \texttt{SigmaTotVp}：
+
+\begin{verbatim}
+double SigmaTotVp(double W) {
+    double dsig_vp_dt0 = kBV * SigmaGammaP(W);
+    return sqrt(16.0 * Pi * hbar_c2 * dsig_vp_dt0 
+                * (kFV2_4PI / kAlpha));
+}
+\end{verbatim}
+
+\section{Glauber 吸收修正}
+
+\subsection{物理图像}
+
+矢量介子产生后，在离开碰撞区时可能穿过对方核的物质，被吸收。这减少了可观测的截面。
+
+\subsection{核厚度函数}
+
+核密度用 Woods-Saxon 分布：
+
+\[
+\rho(r,z) = \frac{\rho_0}{1 + \exp\left(\frac{\sqrt{r^2+z^2} - R_{\text{WS}}}{a_{\text{WS}}}\right)}
+\]
+
+沿 $z$ 方向积分得到厚度函数：
+
+\[
+T_A(r) = \int_{-\infty}^{\infty} \rho(r,z)\,dz \approx 2\int_0^{15} \rho(r,z)\,dz
+\]
+
+数值积分用 100 步，$z \in [0, 15]$ fm。
+
+\subsection{吸收修正因子}
+
+\[
+A(r) = 2\left(1 - \exp\left(-\frac{\sigma_{Vp}^{\text{tot}} T_A(r)}{2}\right)\right)
+\]
+
+物理含义：
+\begin{itemize}[leftmargin=2em]
+    \item 当 $T_A \to 0$（核边缘），$A \to \sigma_{Vp}^{\text{tot}} T_A$，线性吸收
+    \item 当 $T_A \to \infty$（核中心），$A \to 2$，完全吸收（两个核都贡献）
+    \item 因子 2 来自两个核都产生吸收
+\end{itemize}
+
+\section{相干长度因子}
+
+\subsection{物理概念}
+
+光子转化为矢量介子需要一定的纵向距离——相干长度：
+
+\[
+l_c = \frac{2\omega}{M^2} = \frac{4\gamma_L}{M e^{\pm y}}
+\]
+
+当 $l_c$ 小于核的纵向尺寸时，转化过程可以看作发生在核内的某一点。相干长度因子描述了有限核尺寸对纵向相干性的影响。
+
+\subsection{计算}
+
+\[
+\mathcal{C}(r, q_z) = \frac{\int \rho(r,z) \cos\left(\frac{q_z z}{\hbar c}\right) dz}{\int \rho(r,z)\,dz}
+\]
+
+其中纵向动量转移：
+
+\[
+q_z = \frac{M^2}{4\gamma_L \omega}
+\]
+
+当 $q_z \to 0$（大 $\omega$），$\mathcal{C} \to 1$（完全相干）。当 $q_z$ 大时，$\mathcal{C} < 1$（相干性破坏）。
+
+\section{双源量子相干}
+
+\subsection{核心物理}
+
+这是本代码最关键的部分。两个核都是光子源，产生的矢量介子振幅相干叠加。
+
+设核 1 在 $(+b, 0)$，核 2 在 $(-b, 0)$。每个核产生的振幅为 $\vec{\mathcal{A}}_1$ 和 $\vec{\mathcal{A}}_2$。
+
+\subsection{空间振幅}
+
+对核 1，在网格点 $(x,y)$ 处：
+
+\[
+\vec{\mathcal{A}}_1(x,y) = \mathcal{E}(\omega_1, r_1) \cdot A(r_{\text{grid}}) \cdot \mathcal{C}(r_{\text{grid}}, q_{z1}) \cdot \frac{\vec{r}_1}{r_1}
+\]
+
+其中：
+\begin{itemize}[leftmargin=2em]
+    \item $\mathcal{E}$：等效光子场
+    \item $A$：吸收修正
+    \item $\mathcal{C}$：相干长度因子
+    \item $\vec{r}_1/r_1$：光子极化方向（从核中心指向网格点）
+    \item $r_1 = \sqrt{(x-b)^2 + y^2}$：网格点到核 1 的距离
+\end{itemize}
+
+核 2 类似，$r_2 = \sqrt{(x+b)^2 + y^2}$。
+
+\subsection{FFT 变换到动量空间}
+
+代码对 $80 \times 80$ 空间网格做离散傅里叶变换。先沿 $y$ 方向 FFT，再沿 $x$ 方向 FFT：
+
+\[
+\tilde{\mathcal{A}}_1(p_x, p_y) = \sum_{x,y} \mathcal{A}_1(x,y) \, e^{-i(p_x x + p_y y)/\hbar c}
+\]
+
+动量网格：$p_x = n_x \cdot \Delta p$，$\Delta p = \frac{2\pi}{L} \hbar c$，其中 $L = 40$ fm 是空间盒子尺寸，$\Delta p = 0.031$ GeV。
+
+\subsection{双源相干叠加}
+
+两个核相距 $2b$，在动量空间中引入相位差：
+
+\[
+\text{shift}_1 = \exp\left(i \frac{p_x b}{2\hbar c}\right), \quad 
+\text{shift}_2 = \exp\left(-i \frac{p_x b}{2\hbar c}\right)
+\]
+
+最终振幅：
+
+\[
+\vec{\mathcal{A}}(p_x, p_y) = \tilde{\mathcal{A}}_1 \cdot \text{shift}_1 + \tilde{\mathcal{A}}_2 \cdot \text{shift}_2
+\]
+
+\textbf{关键物理}：这个相位差 $p_x b/\hbar c$ 就是双源干涉的根源！不同的 $b$ 给出不同的干涉图案。
+
+\subsection{截面与极化}
+
+\[
+\frac{d^2\sigma}{dp_x dp_y} \propto |\mathcal{A}_x|^2 + |\mathcal{A}_y|^2
+\]
+
+极化信息保存在：
+\[
+|\mathcal{A}_x|^2, \quad |\mathcal{A}_y|^2, \quad \text{Re}(\mathcal{A}_x \mathcal{A}_y^*), \quad \text{Im}(\mathcal{A}_x \mathcal{A}_y^*)
+\]
+
+这些对应于自旋密度矩阵的分量，用于后续衰变角分析。
+
+\section{碰撞参数积分}
+
+\subsection{积分公式}
+
+对碰撞参数 $b$ 积分：
+
+\[
+\frac{d^2\sigma}{dM dy} = \int_0^{\infty} db \, 2\pi b \, P_{\text{surv}}(b) P_{\text{tag}}(b) \cdot \mathcal{M}(b)
+\]
+
+其中 $\mathcal{M}(b)$ 是固定 $b$ 时的运动学积分结果。
+
+\subsection{存活概率}
+
+从 Glauber 模型计算的存活概率直方图读取。硬截断：$b < 2R_{\text{WS}}$ 时 $P_{\text{surv}} = 0$。
+
+\subsection{EMD 标记}
+
+向前零度量热器 (EMD) 探测核激发后蒸发的中子。不同标记对应不同的 $b$ 范围：
+\begin{itemize}[leftmargin=2em]
+    \item \texttt{NoTag}：无标记，积分到 $b = 1000$ fm
+    \item \texttt{1n} / \texttt{Xn}：单侧中子标记
+    \item \texttt{1n1n} / \texttt{XnXn}：双侧中子标记，积分到 $b = 100$ fm
+\end{itemize}
+
+\subsection{数值积分策略}
+
+分两个区域：
+\begin{itemize}[leftmargin=2em]
+    \item 核心区：$b \in [12, 50]$ fm，38 等距点（精细采样干涉条纹）
+    \item 尾部区：$b \in [50, b_{\text{max}}]$ fm，步长 4 fm
+\end{itemize}
+
+\section{$\rho'$ 质量分布}
+
+\subsection{共振 + 背景模型}
+
+$\rho'$ 的质量分布不是简单的 Breit-Wigner，而是共振振幅和非共振背景的相干叠加：
+
+\[
+\mathcal{A}(M) = \mathcal{A}_{\text{res}}(M) + \mathcal{A}_{\text{nr}}(M)
+\]
+
+\subsection{共振部分}
+
+\[
+\mathcal{A}_{\text{res}}(M) = \frac{A_{\text{res}} \sqrt{M_{\text{res}} \Gamma(M)}}{(M_{\text{res}}^2 - M^2) + i M_{\text{res}} \Gamma(M)}
+\]
+
+实部和虚部分别为：
+
+\[
+\text{Re}_{\text{res}} = \frac{A_{\text{res}} \sqrt{M_{\text{res}} \Gamma(M)} \cdot (M_{\text{res}}^2 - M^2)}{(M_{\text{res}}^2 - M^2)^2 + (M_{\text{res}} \Gamma(M))^2}
+\]
+
+\[
+\text{Im}_{\text{res}} = \frac{A_{\text{res}} \sqrt{M_{\text{res}} \Gamma(M)} \cdot M_{\text{res}} \Gamma(M)}{(M_{\text{res}}^2 - M^2)^2 + (M_{\text{res}} \Gamma(M))^2}
+\]
+
+\subsection{质量依赖宽度}
+
+\[
+\Gamma(M) = \Gamma_0 \cdot \frac{M_0}{M} \cdot \left( \frac{q(M)}{q(M_0)} \right)^3
+\]
+
+其中 $q(M) = \sqrt{M^2 - (4m_\pi)^2}$ 是 $4\pi$ 相空间动量。立方幂来自 p 波衰变 ($L=1$)。
+
+注意：阈值是 $4m_\pi$ 而非 $2m_\pi$，因为这是 $\rho' \to 4\pi$ 的整体分布。
+
+\subsection{非共振背景}
+
+\[
+\mathcal{A}_{\text{nr}}(M) = A_{\text{nr}} \cdot \sqrt{1 - \left(\frac{4m_\pi}{M}\right)^2} \cdot e^{-B_{\text{nr}}(M - 4m_\pi)} \cdot e^{i\phi_{\text{nr}}}
+\]
+
+相空间因子 $\sqrt{1 - (4m_\pi/M)^2}$ 保证阈值处振幅为零。指数衰减 $e^{-B_{\text{nr}}(M-4m_\pi)}$ 描述背景随质量增长而衰减。
+
+\subsection{概率分布}
+
+\[
+P(M) \propto |\mathcal{A}_{\text{res}} + \mathcal{A}_{\text{nr}}|^2 = (\text{Re}_{\text{res}} + \text{Re}_{\text{nr}})^2 + (\text{Im}_{\text{res}} + \text{Im}_{\text{nr}})^2
+\]
+
+\textbf{关键物理}：共振和背景之间有相对相位 $\phi_{\text{nr}}$，导致质量谱的不对称性（Fano 型干涉）。
+
+\subsection{拟合参数}
+
+\begin{longtable}{l l l}
+\toprule
+\textbf{参数} & \textbf{值} & \textbf{物理含义} \\
+\midrule
+$M_{\text{res}}$ & $1.57773$ GeV & 共振峰位置 \\
+$\Gamma_0$ & $0.611252$ GeV & 共振宽度 \\
+$A_{\text{res}}$ & $1.11569$ & 共振振幅归一化 \\
+$A_{\text{nr}}$ & $0.151507$ & 背景振幅归一化 \\
+$B_{\text{nr}}$ & $0.0836185$ GeV$^{-1}$ & 背景衰减速率 \\
+$\phi_{\text{nr}}$ & $5.17 \times 10^{-5}$ & 共振-背景相对相位 \\
+\bottomrule
+\end{longtable}
+
+\section{事件生成}
+
+\subsection{整体流程}
+
+\begin{enumerate}[leftmargin=2em]
+    \item 从 $\frac{d^2\sigma}{dM dy}$ 直方图采样 $(M, y)$
+    \item 从 $p_x$-$p_y$ 空间分布采样 $(p_x, p_y)$
+    \item 采样中间态质量 $(m_\rho, m_\sigma)$
+    \item 执行衰变链 $\rho' \to \rho\sigma \to 4\pi$
+    \item 应用玻色对称化
+    \item 计算事件权重
+\end{enumerate}
+
+\subsection{中间态质量采样：截断 Cauchy 分布}
+
+为什么不从 Breit-Wigner 直接采样？因为：
+\begin{enumerate}[leftmargin=2em]
+    \item BW 分布有长尾，采样效率低
+    \item 有运动学约束 $m_\rho + m_\sigma < M$
+    \item 需要 Importance Sampling 提高效率
+\end{enumerate}
+
+所以用截断 Cauchy 分布作为提议分布：
+
+\[
+f_{\text{Cauchy}}(m; \mu, \Gamma) = \frac{1}{\pi \Gamma \left[1 + \left(\frac{m-\mu}{\Gamma}\right)^2\right]}
+\]
+
+CDF：
+\[
+F(x) = \frac{1}{\pi} \arctan\left(\frac{x-\mu}{\Gamma}\right) + \frac{1}{2}
+\]
+
+截断到 $[x_{\text{lo}}, x_{\text{hi}}]$ 后采样：
+
+\[
+x = \mu + \Gamma \tan\left[ \pi \left( F(x_{\text{lo}}) + u(F(x_{\text{hi}}) - F(x_{\text{lo}})) - \frac{1}{2} \right) \right]
+\]
+
+其中 $u \sim \text{Uniform}(0,1)$。
+
+\subsection{衰变运动学}
+
+\subsubsection{二体衰变}
+
+母粒子质量 $M_P$ 衰变到 $m_1, m_2$。在母粒子静止系中：
+
+\[
+p^* = \frac{\sqrt{[M_P^2 - (m_1+m_2)^2][M_P^2 - (m_1-m_2)^2]}}{2M_P}
+\]
+
+各向同性衰变：$\cos\theta \sim \text{Uniform}(-1,1)$，$\phi \sim \text{Uniform}(0, 2\pi)$。
+
+\subsubsection{级联衰变}
+
+\begin{enumerate}[leftmargin=2em]
+    \item $\rho'(M) \to \rho^0(m_\rho) + \sigma(m_\sigma)$：在 $\rho'$ 静止系中各向同性衰变
+    \item $\rho^0 \to \pi^+(m_\pi) + \pi^-(m_\pi)$：在 $\rho^0$ 静止系中各向同性衰变
+    \item $\sigma \to \pi^+(m_\pi) + \pi^-(m_\pi)$：在 $\sigma$ 静止系中各向同性衰变
+\end{enumerate}
+
+每一步衰变后，用 Lorentz boost 把子粒子变换到上一级参考系。最终所有粒子在 $\rho'$ 静止系中。
+
+\subsubsection{从静止系到实验室系}
+
+\[
+m_T = \sqrt{M^2 + p_x^2 + p_y^2}, \quad p_z = m_T \sinh(y), \quad E = m_T \cosh(y)
+\]
+
+构建 $\rho'$ 的实验室四动量 $(p_x, p_y, p_z, E)$，然后 Boost 所有子粒子。
+
+\subsection{相空间权重}
+
+4 粒子相空间 $d\Phi_4$ 的变量部分（级联衰变参数化下）：
+
+\[
+W_{\text{PS}} = 2m_\rho \cdot 2m_\sigma \cdot \frac{p_{\rho\sigma}}{M} \cdot \frac{q_\rho}{m_\rho} \cdot \frac{q_\sigma}{m_\sigma}
+\]
+
+其中：
+\begin{itemize}[leftmargin=2em]
+    \item $p_{\rho\sigma}$：$\rho$-$\sigma$ 在 $\rho'$ 静止系中的动量
+    \item $q_\rho = \frac{1}{2}\sqrt{m_\rho^2 - 4m_\pi^2}$：$\pi$ 在 $\rho$ 静止系中的动量
+    \item $q_\sigma = \frac{1}{2}\sqrt{m_\sigma^2 - 4m_\pi^2}$：$\pi$ 在 $\sigma$ 静止系中的动量
+    \item $2m_\rho \cdot 2m_\sigma$：来自 $dm_\rho^2 \to 2m_\rho dm_\rho$ 的 Jacobian
+\end{itemize}
+
+\section{玻色对称化}
+
+\subsection{为什么需要玻色对称化？}
+
+终态有 2 个 $\pi^+$ 和 2 个 $\pi^-$。它们是全同粒子，量子力学要求总波函数对交换全同粒子对称。
+
+\subsection{4 种配对方式}
+
+设 $\pi$ 介子标记为 $1,2,3,4$，电荷为 $+,-,+,-$。$\rho^0$ 和 $\sigma$ 是不同的中间态，所以有以下 4 种配对：
+
+\begin{enumerate}[leftmargin=2em]
+    \item A: $\pi_1^+ \pi_2^- \to \rho$, $\pi_3^+ \pi_4^- \to \sigma$
+    \item B: $\pi_3^+ \pi_2^- \to \rho$, $\pi_1^+ \pi_4^- \to \sigma$
+    \item C: $\pi_1^+ \pi_4^- \to \rho$, $\pi_3^+ \pi_2^- \to \sigma$
+    \item D: $\pi_3^+ \pi_4^- \to \rho$, $\pi_1^+ \pi_2^- \to \sigma$
+\end{enumerate}
+
+总振幅是 4 项的相干叠加：
+
+\[
+\vec{\mathcal{M}}_{\text{tot}} = \vec{\mathcal{A}}_A + \vec{\mathcal{A}}_B + \vec{\mathcal{A}}_C + \vec{\mathcal{A}}_D
+\]
+
+\textbf{注意}：4 项都取正号，因为 $\rho$ 和 $\sigma$ 是不同粒子，交换它们不引入负号。
+
+\subsection{单配对振幅}
+
+对每一种配对，振幅为：
+
+\[
+\vec{\mathcal{A}} = BW_\rho(m_{\rho}) \cdot BW_\sigma(m_{\sigma}) \cdot (\vec{p}_{\pi^+} - \vec{p}_{\pi^-})
+\]
+
+其中 $BW$ 是 Breit-Wigner 振幅，$(\vec{p}_{\pi^+} - \vec{p}_{\pi^-})$ 是 $\rho$ 衰变产子的三维动量差（矢量介子的极化矢量）。
+
+\subsection{Breit-Wigner 振幅}
+
+\[
+BW(m; m_0, \Gamma_0, L) = \frac{1}{m^2 - m_0^2 + i m_0 \Gamma_V(m)}
+\]
+
+质量依赖宽度：
+\[
+\Gamma_V(m) = \Gamma_0 \cdot \left(\frac{q(m)}{q(m_0)}\right)^{2L+1} \cdot \frac{m_0}{m}
+\]
+
+\begin{itemize}[leftmargin=2em]
+    \item $\rho$：$m_0 = 0.775$ GeV, $\Gamma_0 = 0.149$ GeV, $L=1$ (p 波)
+    \item $\sigma$：$m_0 = 0.500$ GeV, $\Gamma_0 = 0.400$ GeV, $L=0$ (s 波)
+\end{itemize}
+
+\section{事件权重}
+
+\subsection{权重组成}
+
+\[
+w = \underbrace{\mathcal{I}}_{\text{极化强度}} \cdot \underbrace{\frac{W_{\text{PS}}}{f_{\text{Cauchy}}(m_\rho) f_{\text{Cauchy}}(m_\sigma)}}_{\text{相空间/提议分布}} \cdot \underbrace{\frac{1}{N_{\text{decay}}(M)}}_{\text{归一化}}
+\]
+
+\subsection{极化强度}
+
+从 UPC 截面计算中得到的自旋密度矩阵：
+
+\[
+\rho_{xx} = \frac{|\mathcal{A}_x|^2}{I_{\text{tot}}}, \quad \rho_{yy} = \frac{|\mathcal{A}_y|^2}{I_{\text{tot}}}, \quad \rho_{xy} = \frac{\mathcal{A}_x \mathcal{A}_y^*}{I_{\text{tot}}}
+\]
+
+其中 $I_{\text{tot}} = |\mathcal{A}_x|^2 + |\mathcal{A}_y|^2$。
+
+加权强度：
+
+\[
+\mathcal{I} = \rho_{xx} |\mathcal{M}_x|^2 + \rho_{yy} |\mathcal{M}_y|^2 + 2\text{Re}\left(\rho_{xy} \mathcal{M}_y \mathcal{M}_x^*\right)
+\]
+
+\subsection{归一化因子 $N_{\text{decay}}(M)$}
+
+对每个质量 bin，预先用 Monte Carlo 估计衰变权重的平均值：
+
+\[
+N_{\text{decay}}(M) = \left\langle \frac{0.5(|\mathcal{M}_x|^2 + |\mathcal{M}_y|^2) \cdot W_{\text{PS}}}{f_{\text{Cauchy}}(m_\rho) f_{\text{Cauchy}}(m_\sigma)} \right\rangle
+\]
+
+这里用非极化的横向平均代替极化强度（各向同性假设）。每质量 bin 用 20000 次试验估计。
+
+\section{自旋对齐分析}
+
+\subsection{物理概念}
+
+矢量介子的自旋方向反映了产生机制。通过测量衰变产子的角分布，可以提取自旋信息。
+
+\subsection{坐标系定义}
+
+\begin{itemize}[leftmargin=2em]
+    \item $\hat{z} = \hat{z}_{\text{lab}}$：实验室系 $z$ 方向（束流方向）
+    \item $\hat{x} = \hat{p}_T(\rho')$：$\rho'$ 的横向动量方向
+    \item $\hat{y} = \hat{z} \times \hat{x}$
+\end{itemize}
+
+这些是纯空间方向，不需要从任何参考系 boost。
+
+\subsection{角分布}
+
+在 $\pi^+\pi^-$ 对的静止系中，$\pi^+$ 的动量方向用 $(\theta, \phi)$ 描述。
+
+自旋对齐参数通过 $\langle \cos\phi \rangle$ 和 $\langle \cos 2\phi \rangle$ 提取：
+
+\[
+2\langle \cos\phi \rangle, \quad 2\langle \cos 2\phi \rangle
+\]
+
+如果 $\rho'$ 是横向极化的，$\langle \cos 2\phi \rangle \neq 0$。
+
+\subsection{玻色 vs 非玻色分析}
+
+\subsubsection{非玻色事件}
+
+直接利用 \texttt{pi\_parent} 标签识别来自 $\rho$ 衰变的 $\pi^+\pi^-$ 对。
+
+\subsubsection{玻色事件}
+
+没有 \texttt{pi\_parent} 标签（所有 4 种配对都可能）。需要：
+\begin{enumerate}[leftmargin=2em]
+    \item 遍历所有 4 种 $\pi^+\pi^-$ 配对
+    \item 对每对计算不变质量
+    \item 筛选 $0.6 < M_{\pi\pi} < 0.9$ GeV（$\rho$ 质量窗口）
+    \item 对接受的配对计算角分布
+\end{enumerate}
+
+\section{物理常数完整列表}
+
+\subsection{基本常数}
+
+\begin{longtable}{l l l}
+\toprule
+\textbf{符号} & \textbf{值} & \textbf{含义} \\
+\midrule
+$\alpha$ & $1/137.036$ & 精细结构常数 \\
+$\hbar c$ & $0.197327$ GeV$\cdot$fm & 约化普朗克常数 $\times$ 光速 \\
+$(\hbar c)^2$ & $0.0389379$ GeV$^2\cdot$fm$^2$ & \\
+$m_p$ & $0.93827$ GeV & 质子质量 \\
+$m_\pi$ & $0.13957$ GeV & $\pi^\pm$ 质量 \\
+\bottomrule
+\end{longtable}
+
+\subsection{粒子参数}
+
+\begin{longtable}{l l l l}
+\toprule
+\textbf{粒子} & \textbf{质量 (GeV)} & \textbf{宽度 (GeV)} & \textbf{备注} \\
+\midrule
+$\rho(770)$ & $0.77526$ & $0.1491$ & p 波衰变 $\to \pi\pi$ \\
+$\sigma$ & $0.500$ & $0.400$ & s 波衰变 $\to \pi\pi$ \\
+$\rho'(1450)$ & $1.57773$ & $0.611252$ & 共振参数 \\
+\bottomrule
+\end{longtable}
+
+\subsection{VMD 参数}
+
+\begin{longtable}{l l l}
+\toprule
+\textbf{符号} & \textbf{值} & \textbf{含义} \\
+\midrule
+$f_V^2/4\pi$ & $8.4$ & 矢量介子衰变常数 \\
+$b_V$ & $9.4$ GeV$^{-2}$ & 散射斜率参数 \\
+$\mathcal{B}_{4\pi}$ & $0.2$ & $\rho' \to 4\pi$ 分支比 \\
+$x_p$ & $0.00026$ & $\gamma p$ 截面参数 \\
+$\epsilon$ & $0.28$ & 幂律指数 \\
+$y_p$ & $0.02078$ & $\gamma p$ 截面参数 \\
+$\eta$ & $1.21$ & 幂律指数 \\
+\bottomrule
+\end{longtable}
+
+\subsection{核参数}
+
+\begin{longtable}{l l l l l}
+\toprule
+\textbf{核} & \textbf{Z} & \textbf{A} & \textbf{$R_{WS}$ (fm)} & \textbf{$a_{WS}$ (fm)} \\
+\midrule
+Pb-208 & 82 & 208 & 6.62 & 0.546 \\
+Au-197 & 79 & 197 & 6.38 & 0.535 \\
+\bottomrule
+\end{longtable}
+
+\section{代码文件说明}
+
+\subsection{第一阶段：截面计算}
+
+\subsubsection{\texttt{UpcRhoPrimeModel.cxx}}
+
+实现 UPC 截面计算的核心物理。主要函数：
+
+\begin{longtable}{l p{8cm}}
+\toprule
+\textbf{函数} & \textbf{功能} \\
+\midrule
+\texttt{ThicknessFunctionWS} & 核厚度函数 $T_A(r)$ \\
+\texttt{CoherentLengthFactor} & 相干长度因子 $\mathcal{C}(r,q_z)$ \\
+\texttt{GammaM} & 质量依赖宽度 $\Gamma(M)$ \\
+\texttt{MassDistUnnormalized} & $\rho'$ 质量分布 $P(M)$ \\
+\texttt{SigmaGammaP} & $\gamma p$ 截面 $\sigma_{\gamma p}(W)$ \\
+\texttt{SigmaTotVp} & $Vp$ 总截面 $\sigma_{Vp}^{\text{tot}}(W)$ \\
+\texttt{CalcPhotonField} & 等效光子场 $\mathcal{E}(\omega,r)$ \\
+\texttt{CalcAbsorptionProfile} & 吸收修正 $A(r)$ \\
+\texttt{D2SigmaDMdy} & 核心：计算 $\frac{d^2\sigma}{dM dy}$ 和极化张量 \\
+\texttt{GenerateUpcRhoPrimeGrid} & 主函数：生成完整网格 \\
+\bottomrule
+\end{longtable}
+
+\subsubsection{\texttt{UpcRhoPrimeModelOpt.cxx}}
+
+优化版，预计算 $\omega$ 查找表（50 个对数等间距点），加速约 1.7 倍。利用象限对称性减少 FFT 计算。
+
+\subsection{第二阶段：事件生成}
+
+\subsubsection{\texttt{EventGeneratorBose.cxx}}
+
+\begin{longtable}{l p{8cm}}
+\toprule
+\textbf{函数} & \textbf{功能} \\
+\midrule
+\texttt{TwoBodyMomentum} & 二体衰变动量 $p^*$ \\
+\texttt{DecayTwoBodyIsotropic} & 各向同性二体衰变 \\
+\texttt{SampleTruncatedCauchy} & 截断 Cauchy 采样 \\
+\texttt{CascadePhaseSpaceWeight} & 级联相空间权重 $W_{\text{PS}}$ \\
+\texttt{MassDependentWidth} & 质量依赖宽度 $\Gamma_V(m)$ \\
+\texttt{BreitWigner} & Breit-Wigner 振幅 \\
+\texttt{AmpPair} & 单配对振幅 $\vec{\mathcal{A}}$ \\
+\texttt{RawCandidateWeight} & 事件权重（含玻色对称化+极化） \\
+\texttt{EstimateDecayWeightNorm} & 衰变归一化估计 \\
+\texttt{MakeCandidate} & 生成单个候选事件 \\
+\texttt{Generate} & 主函数：生成事件文件 \\
+\bottomrule
+\end{longtable}
+
+\subsection{第三阶段：分析}
+
+\subsubsection{\texttt{analyze\_bose.cxx}}
+
+分析玻色对称化事件。输出不变质量谱、快度谱、$p_T$ 谱、自旋对齐参数 $2\langle\cos\phi\rangle$ 和 $2\langle\cos 2\phi\rangle$。
+
+\subsubsection{\texttt{analyze\_nonbose.cxx}}
+
+分析非玻色事件。额外输出 $\rho$ 对和 $\sigma$ 对的不变质量谱、$\rho$ 对的 $p_T$ 谱、vs $m_\rho$ 的自旋对齐。
+
+\section{使用指南}
+
+\subsection{生成 Glauber 概率文件}
+
+\begin{verbatim}
+root -l -b -q 'calc_UPC_EMD_Glauber_unified.C(
+  "PbPb", 5360, 68, 
+  "UPC_Probabilities_PbPb_5360GeV_Glauber_Final.root")'
+\end{verbatim}
+
+\subsection{编译}
+
+\begin{verbatim}
+mkdir build && cd build
+cmake ..
+make -j
+\end{verbatim}
+
+\subsection{生成截面网格}
+
+\begin{verbatim}
+./generate_grid_opt PbPb 5360 NoTag \\
+  output.root 30 40 38 4 0.1 10 40
+\end{verbatim}
+
+参数顺序：系统、$\sqrt{s_{NN}}$、触发、输出文件、$n_M$、$n_p$、$b_{\text{core\_steps}}$、$b_{\text{tail\_step}}$、$y_{\text{half}}$、$n_y$、$L_{\text{box}}$。
+
+\subsection{生成事件}
+
+\begin{verbatim}
+./generate_bose grid.root events.root 1000000 42 20000 1
+\end{verbatim}
+
+参数：输入网格、输出事件、事件数、随机种子、衰变归一化试验数、玻色对称化开关。
+
+\subsection{分析事件}
+
+\begin{verbatim}
+./analyze_bose events.root analysis.root 1000000
+\end{verbatim}
+
+\section{常见问题}
+
+\begin{enumerate}[leftmargin=2em]
+    \item \textbf{为什么用 Cauchy 而不是 Breit-Wigner 采样中间态质量？}
+    
+    Cauchy 分布形状接近 BW，但没有复杂的运动学约束处理。Importance Sampling 的提议分布只需要覆盖相空间，不需要精确匹配物理分布——权重会修正差异。
+    
+    \item \textbf{为什么玻色对称化只加 4 项而不是 24 项？}
+    
+    因为 $\rho$ 和 $\sigma$ 是不同的中间态，交换 $\rho$ 和 $\sigma$ 的角色给出不同的物理过程。只有相同电荷的 $\pi$ 之间交换才需要对称化。
+    
+    \item \textbf{双源干涉的物理意义是什么？}
+    
+    两个核相距 $2b$，光子波函数从两个源发出，在动量空间产生干涉条纹。条纹间距 $\Delta p \sim \hbar/b$。不同 $b$ 的干涉图案叠加后，在 $p_T$ 谱上留下特征结构。
+    
+    \item \textbf{为什么自旋轴不需要 boost？}
+    
+    自旋轴定义为实验室系中的空间方向（$\hat{z}_{\text{lab}}$ 和 $\hat{p}_T(\rho')$）。虽然衰变在粒子静止系中进行，但角度是相对于这些固定空间轴测量的，所以不需要额外的 Lorentz boost。
+\end{enumerate}
+
+
+\section{完整网格配置参数}
+
+\begin{longtable}{l l l}
+\toprule
+\textbf{参数} & \textbf{默认值} & \textbf{含义} \\
+\midrule
+\texttt{system} & \texttt{"PbPb"} & 碰撞系统 (PbPb/AuAu) \\
+\texttt{sqrt\_s\_NN\_GeV} & $5360.0$ & $\sqrt{s_{NN}}$ (GeV) \\
+\texttt{trigger} & \texttt{"NoTag"} & 触发条件 (NoTag/EMD\_1n/EMD\_Xn/EMD\_1n1n/EMD\_XnXn) \\
+\texttt{n\_mass\_bins} & $30$ & 质量分箱数 \\
+\texttt{mass\_min\_GeV} & $4 \times 0.13957 = 0.55828$ & 质量下限 (GeV) \\
+\texttt{mass\_max\_GeV} & $3.0$ & 质量上限 (GeV) \\
+\texttt{n\_rapidity\_bins} & $10$ & 快度分箱数 \\
+\texttt{rapidity\_min} & $-1.0$ & 快度下限 \\
+\texttt{rapidity\_max} & $1.0$ & 快度上限 \\
+\texttt{n\_p\_bins\_each\_side} & $40$ & $p_x$/$p_y$ 各侧分箱数 \\
+\texttt{global\_box\_fm} & $40.0$ & 全局 FFT 盒子尺寸 (fm) \\
+\texttt{b\_core\_steps} & $38$ & 碰撞参数核心区采样数 \\
+\texttt{b\_core\_min\_fm} & $12.0$ & 碰撞参数核心区下限 (fm) \\
+\texttt{b\_core\_max\_fm} & $50.0$ & 碰撞参数核心区上限 (fm) \\
+\texttt{b\_tail\_min\_fm} & $50.0$ & 碰撞参数尾部下限 (fm) \\
+\texttt{b\_tail\_max\_notag\_fm} & $1000.0$ & 非标记尾部上限 (fm) \\
+\texttt{b\_tail\_max\_tagged\_fm} & $100.0$ & 标记尾部上限 (fm) \\
+\texttt{b\_tail\_step\_fm} & $4.0$ & 尾部步长 (fm) \\
+\bottomrule
+\end{longtable}
+
+空间网格：$kNLoc = 80 \times 80$ 点，覆盖 $40 \times 40$ fm$^2$ 区域。网格步长 $kDxLocFm = 0.5$ fm。厚度函数查找表 $kLutBins = 3000$ 个径向分箱，步长 $0.1$ fm。动量网格总点数 $n_{\text{bins}}^{\text{total}} = 81$，动量步长 $\Delta p = \frac{2\pi}{40} \cdot \hbar c = 0.031$ GeV。
+
+\section{优化版实现细节}
+
+\subsubsection{Omega 查找表}
+
+预计算 50 个对数等间距 $\omega$ 点，覆盖 $\omega_{\text{min}} = 0.5 M_{\text{min}} e^{-y_{\text{max}}}$ 到 $\omega_{\text{max}} = 0.5 M_{\text{max}} e^{y_{\text{max}}}$。对每个 $\omega$ 预计算 $\sigma_{Vp}^{\text{tot}}(\omega)$ 和光子场径向分布 $\mathcal{E}(\omega, r)$。运行时通过线性插值（对数空间）获取任意 $\omega$ 的值。加速因子约 1.7x。
+
+\subsubsection{象限对称性}
+
+利用 $(p_x, p_y)$ 四象限的对称性，只计算第一象限 $(p_x \ge 0, p_y \ge 0)$，然后通过符号翻转填充其他象限：
+
+\[
+\text{Re}(\mathcal{A}_x \mathcal{A}_y^*) \text{ 在 } p_x \to -p_x \text{ 时反号}
+\]
+\[
+\text{Im}(\mathcal{A}_x \mathcal{A}_y^*) \text{ 在 } p_y \to -p_y \text{ 时反号}
+\]
+
+\section{输出 ROOT 文件完整内容}
+
+\subsection{截面网格文件}
+
+文件名格式：\texttt{UPC\_CrossSection\_{system}\_{energy}GeV\_{trigger}\_Optimized.root}
+
+包含的直方图：
+
+\begin{longtable}{l p{9cm}}
+\toprule
+\textbf{对象名} & \textbf{内容} \\
+\midrule
+\texttt{h2\_dM\_dy} & $\frac{d^2\sigma}{dM\,dy}$ (mb/GeV)，30 $\times$ 10 二维直方图 \\
+\texttt{h\_dM} & $\frac{d\sigma}{dM}$ (mb/GeV)，30 个质量 bin \\
+\texttt{h\_dy} & $\frac{d\sigma}{dy}$ (mb)，10 个快度 bin \\
+\texttt{h2\_px\_py\_sigma} & 总截面 $|\mathcal{A}_x|^2 + |\mathcal{A}_y|^2$ 在 $p_x$-$p_y$ 空间，$81 \times 81$ \\
+\texttt{h2\_px\_py\_Ax2} & $|\mathcal{A}_x|^2$ 分量，$81 \times 81$ \\
+\texttt{h2\_px\_py\_Ay2} & $|\mathcal{A}_y|^2$ 分量，$81 \times 81$ \\
+\texttt{h2\_px\_py\_ReAxAy} & $\text{Re}(\mathcal{A}_x \mathcal{A}_y^*)$ 分量，$81 \times 81$ \\
+\texttt{h2\_px\_py\_ImAxAy} & $\text{Im}(\mathcal{A}_x \mathcal{A}_y^*)$ 分量，$81 \times 81$ \\
+\texttt{h2\_px\_py\_sigma\_y\{i\}} & 第 $i$ 个快度 bin 的总截面，$81 \times 81$ \\
+\texttt{h2\_px\_py\_Ax2\_y\{i\}} & 第 $i$ 个快度 bin 的 $|\mathcal{A}_x|^2$ \\
+\texttt{h2\_px\_py\_Ay2\_y\{i\}} & 第 $i$ 个快度 bin 的 $|\mathcal{A}_y|^2$ \\
+\texttt{h2\_px\_py\_ReAxAy\_y\{i\}} & 第 $i$ 个快度 bin 的 $\text{Re}(\mathcal{A}_x \mathcal{A}_y^*)$ \\
+\texttt{h2\_px\_py\_ImAxAy\_y\{i\}} & 第 $i$ 个快度 bin 的 $\text{Im}(\mathcal{A}_x \mathcal{A}_y^*)$ \\
+\texttt{n\_rapidity\_bins} & TParameter: 快度分箱数 \\
+\bottomrule
+\end{longtable}
+
+\subsection{事件文件 TTree 分支}
+
+TTree 名称：\texttt{Events}
+
+每个事件的分支：
+
+\begin{longtable}{l l p{5cm}}
+\toprule
+\textbf{分支名} & \textbf{类型} & \textbf{含义} \\
+\midrule
+\texttt{event\_weight} & double & 事件权重 \\
+\texttt{M\_rhoprime} & double & $\rho'$ 不变质量 (GeV) \\
+\texttt{y\_rhoprime} & double & $\rho'$ 快度 \\
+\texttt{pt\_rhoprime} & double & $\rho'$ 横向动量 (GeV) \\
+\texttt{m\_rho} & double & $\rho^0$ 质量 (GeV) \\
+\texttt{m\_sigma} & double & $\sigma$ 质量 (GeV) \\
+\texttt{pol\_xx} & double & 自旋密度矩阵 $\rho_{xx}$ \\
+\texttt{pol\_yy} & double & 自旋密度矩阵 $\rho_{yy}$ \\
+\texttt{pol\_rexy} & double & $\text{Re}(\rho_{xy})$ \\
+\texttt{pol\_imxy} & double & $\text{Im}(\rho_{xy})$ \\
+\texttt{pi1}--\texttt{pi4} & TLorentzVector & 4 个 $\pi$ 的四动量 \\
+\texttt{rho\_momentum} & TLorentzVector & $\rho^0$ 四动量 \\
+\texttt{sigma\_momentum} & TLorentzVector & $\sigma$ 四动量 \\
+\texttt{pi\_parent[4]} & int[4] & $[1,1,2,2]$（1=$\rho$, 2=$\sigma$） \\
+\texttt{pi\_charge[4]} & int[4] & $[+1,-1,+1,-1]$ \\
+\bottomrule
+\end{longtable}
+
+文件级参数：
+\begin{itemize}[leftmargin=2em]
+    \item \texttt{requested\_events}：请求的事件数
+    \item \texttt{filled\_events}：实际生成的事件数
+    \item \texttt{rejected\_candidates}：被拒绝的候选数
+    \item \texttt{weighted\_event\_mode}：$=1$（权重模式）
+    \item \texttt{bose\_symmetrize}：是否启用玻色对称化
+    \item \texttt{cross\_section\_mb}：总截面 (mb)
+    \item \texttt{decay\_norm\_trials\_per\_mass}：衰变归一化试验数
+    \item \texttt{m\_pi\_GeV}, \texttt{m\_rho\_GeV}, \texttt{gamma\_rho\_GeV}, \texttt{m\_sigma\_GeV}, \texttt{gamma\_sigma\_GeV}
+\end{itemize}
+
+\subsection{Glauber 概率文件内容}
+
+生成的 ROOT 文件包含：
+\begin{itemize}[leftmargin=2em]
+    \item \texttt{hProb\_Surv}：存活概率 $P_{\text{surv}}(b)$
+    \item \texttt{hProb\_EMD\_1n}：单侧单中子概率
+    \item \texttt{hProb\_EMD\_Xn}：单侧任意中子概率
+    \item \texttt{hProb\_EMD\_1n1n}：双侧各单中子概率
+    \item \texttt{hProb\_EMD\_XnXn}：双侧任意中子概率
+    \item \texttt{hProb\_SCD\_1n}, \texttt{hProb\_SCD\_Xn}：单协参数发射
+    \item \texttt{hProb\_MCD\_1n1n}, \texttt{hProb\_MCD\_XnXn}：双协参数发射
+\end{itemize}
+
+\subsection{analyze\_bose 输出直方图}
+
+\begin{longtable}{l p{9cm}}
+\toprule
+\textbf{直方图} & \textbf{内容} \\
+\midrule
+\texttt{h\_M\_reco} & 重建的 $M_{4\pi}$ 谱，200 bin, 0.5--5.0 GeV \\
+\texttt{h\_y\_reco} & 重建的快度谱，100 bin, -5--5 \\
+\texttt{h\_pt\_reco} & 重建的 $p_T$ 谱，20 bin, 0--0.2 GeV \\
+\texttt{h\_M\_store} & 存储的 $M_{\rho'}$ 谱，200 bin, 0.5--5.0 GeV \\
+\texttt{h\_y\_store} & 存储的快度谱，100 bin, -5--5 \\
+\texttt{h\_pt\_store} & 存储的 $p_T$ 谱，20 bin, 0--0.2 GeV \\
+\texttt{h\_M\_diff} & $M_{\text{stored}} - M_{4\pi}$ 差异谱，200 bin, -0.01--0.01 GeV \\
+\texttt{h\_M\_y\_reco} & $M_{4\pi}$ vs $y_{4\pi}$ 二维谱，100 $\times$ 60 \\
+\texttt{h\_M\_pt\_reco} & $M_{4\pi}$ vs $p_T$ 二维谱，100 $\times$ 20 \\
+\texttt{h\_m\_rho} & $\rho^0$ 中间态质量谱，100 bin, 0.2--3.5 GeV \\
+\texttt{h\_m\_sigma} & $\sigma$ 中间态质量谱，100 bin, 0.2--3.5 GeV \\
+\texttt{h\_mrho\_msig} & $m_\rho$ vs $m_\sigma$ 二维谱，60 $\times$ 60 \\
+\texttt{h\_weight} & 事件权重分布，200 bin \\
+\texttt{h\_cos2phi\_vs\_pt} & $2\langle\cos 2\phi\rangle$ vs $p_T(\rho')$，20 bin, TProfile \\
+\texttt{h\_cos1phi\_vs\_pt} & $2\langle\cos\phi\rangle$ vs $p_T(\rho')$，20 bin, TProfile \\
+\texttt{h\_cos\_theta\_bose} & $\cos\theta$ 分布，40 bin, -1--1 (对 $0.6 < M_{\pi\pi} < 0.9$ GeV) \\
+\bottomrule
+\end{longtable}
+
+\subsection{analyze\_nonbose 额外输出}
+
+\begin{longtable}{l p{9cm}}
+\toprule
+\textbf{直方图} & \textbf{内容} \\
+\midrule
+\texttt{h\_M\_rho\_pair} & $\rho$ 对 $\pi^+\pi^-$ 不变质量谱，100 bin, 0.2--1.5 GeV \\
+\texttt{h\_M\_sig\_pair} & $\sigma$ 对 $\pi^+\pi^-$ 不变质量谱，100 bin, 0.2--1.5 GeV \\
+\texttt{h\_pt\_rho} & $\rho$ 对 $p_T$ 谱，20 bin, 0--0.2 GeV \\
+\texttt{h\_cos\_theta\_rho} & $\rho$ 衰变 $\pi^+$ 的 $\cos\theta$ 谱，40 bin, -1--1 \\
+\texttt{h\_cos\_theta\_rho\_win} & $\rho$ 衰变 $\pi^+$ 的 $\cos\theta$（质量窗口），40 bin \\
+\texttt{h\_cos2phi\_vs\_m} & $2\langle\cos 2\phi\rangle$ vs $m_\rho$，40 bin, 0.5--1.2 GeV \\
+\texttt{h\_cos1phi\_vs\_m} & $2\langle\cos\phi\rangle$ vs $m_\rho$，40 bin, 0.5--1.2 GeV \\
+\bottomrule
+\end{longtable}
+
+\section{可执行文件完整列表}
+
+CMake 编译后生成 5 个可执行文件：
+
+\begin{longtable}{l p{9cm}}
+\toprule
+\textbf{可执行文件} & \textbf{功能和用法} \\
+\midrule
+\texttt{generate\_grid} & \texttt{./generate\_grid PbPb 5360 NoTag output.root 30 40 38 4 0.1 10 40} \\
+\texttt{generate\_grid\_opt} & 优化版（推荐），用法同上 \\
+\texttt{generate\_bose} & \texttt{./generate\_bose grid.root events.root 1000000 42 20000 1} \\
+\texttt{analyze\_bose} & \texttt{./analyze\_bose events.root analysis.root 1000000} \\
+\texttt{analyze\_nonbose} & \texttt{./analyze\_nonbose events\_nonbose.root analysis\_nb.root 1000000} \\
+\bottomrule
+\end{longtable}
+
+\section{注意事项}
+
+\begin{enumerate}[leftmargin=2em]
+    \item 所有能量/质量单位为 GeV，长度单位为 fm，截面单位为 mb
+    \item 事件使用加权模式（非接受-拒绝），分析时必须使用权重
+    \item TLorentzVector 分支是指针类型，分析代码中 \textbf{不能}调用 \texttt{fin->Close()}
+    \item 自旋轴定义为纯空间方向，不需要从静止系 Boost 到实验室系
+    \item 非玻色事件使用 \texttt{pi\_parent} 标签直接识别 $\rho$ 衰变对
+    \item 玻色事件需要遍历所有 4 种 $\pi^+\pi^-$ 配对
+    \item 快度对称性：$y$ 和 $-y$ 的截面相同，动量方向相反
+    \item Glauber 概率文件必须在运行前生成，放在可搜索路径下
+    \item 网格配置参数的默认值在 \texttt{UpcRhoPrimeModel.h} 中定义
+    \item 优化版 \texttt{generate\_grid\_opt} 比基础版快约 1.7x，推荐优先使用
+\end{enumerate}
+\end{document}
