@@ -73,7 +73,7 @@ ls build/generate_grid_opt build/generate_bose build/analyze_bose build/analyze_
 第一步：生成一个很小的 AuAu 200 GeV、XnXn 触发截面网格。
 
 ```bash
-./build/generate_grid_opt AuAu 200 XnXn build/grid_AuAu200_XnXn_smoke.root 4 10 6 8 0.5 4 40 1
+./build/generate_grid_opt PbPb 5360 NoTag build/grid_PbPb5360_Notag_smoke.root 40 100 1 4 1 20 400 1
 ```
 
 参数含义按顺序是：
@@ -96,7 +96,7 @@ ls build/generate_grid_opt build/generate_bose build/analyze_bose build/analyze_
 第二步：从网格生成 1000 个 Bose 对称事件。
 
 ```bash
-./build/generate_bose build/grid_AuAu200_XnXn_smoke.root build/events_bose_1000.root 1000 12345 500 1
+./build/generate_bose build/grid_PbPb5360_Notag_smoke_split20_merged.root build/events_bose_5000000.root 5000000 12345 500 1
 ```
 
 参数含义：

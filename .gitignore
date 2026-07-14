@@ -9,3 +9,5 @@ build/
 
 # Local review smoke-test outputs.
 review/logs/
+
+*.log

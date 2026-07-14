@@ -52,6 +52,19 @@ add_executable(generate_grid_opt
 
 target_link_libraries(generate_grid_opt PRIVATE rhoprime_core)
 
+add_executable(generate_grid_opt_job
+  src/main_generate_grid_opt_job.cxx
+  src/UpcRhoPrimeModelOpt.cxx
+)
+
+target_link_libraries(generate_grid_opt_job PRIVATE rhoprime_core)
+
+add_executable(merge_grid_opt_jobs
+  src/main_merge_grid_opt_jobs.cxx
+)
+
+target_link_libraries(merge_grid_opt_jobs PRIVATE ROOT::Core ROOT::Hist ROOT::MathCore ROOT::RIO)
+
 add_executable(analyze_bose
   analyze_bose.cxx
 )
