@@ -11,3 +11,5 @@ build/
 review/logs/
 
 *.log
+
+*.png

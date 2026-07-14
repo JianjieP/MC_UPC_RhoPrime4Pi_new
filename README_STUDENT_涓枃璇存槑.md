@@ -118,7 +118,7 @@ Output ROOT: build/events_bose_1000.root
 第三步：分析事件文件，输出直方图。
 
 ```bash
-./build/analyze_bose build/events_bose_1000.root build/analyze_bose_1000.root 1000
+./build/analyze_bose build/events_bose_5000000.root build/analyze_bose_5000000.root 5000000
 ```
 
 输出文件 `build/analyze_bose_1000.root` 里包含质量、快速度、pT、pair mass、角分布等直方图。
