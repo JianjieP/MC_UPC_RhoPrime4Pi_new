@@ -1,5 +1,5 @@
 build/
-build_cmssw/
+build_*/
 clean_test/
 
 # Generated ROOT data products.
