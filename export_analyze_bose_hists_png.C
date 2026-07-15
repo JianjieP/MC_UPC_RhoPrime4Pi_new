@@ -11,6 +11,7 @@
 #include <TDirectory.h>
 #include <TFile.h>
 #include <TKey.h>
+#include <TLine.h>
 #include <TList.h>
 #include <TObject.h>
 #include <TProfile.h>
@@ -74,6 +75,35 @@ void SetTH1YRange(TH1* h) {
     h->SetMaximum(maxY + pad);
 }
 
+bool NeedsZeroLine(const TH1* h) {
+    const std::string name = h->GetName();
+    return name == "h_cos2phi_vs_pt" || name == "h_cos1phi_vs_pt";
+}
+
+void IncludeZeroInYRange(TH1* h) {
+    double minY = h->GetMinimum();
+    double maxY = h->GetMaximum();
+    if (!std::isfinite(minY) || !std::isfinite(maxY)) return;
+
+    minY = std::min(minY, 0.0);
+    maxY = std::max(maxY, 0.0);
+    const double span = maxY - minY;
+    const double pad = span > 0.0 ? 0.12 * span : 0.1;
+    h->SetMinimum(minY - pad);
+    h->SetMaximum(maxY + pad);
+}
+
+void DrawZeroLine(TH1* h) {
+    const double xmin = h->GetXaxis()->GetXmin();
+    const double xmax = h->GetXaxis()->GetXmax();
+    TLine* line = new TLine(xmin, 0.0, xmax, 0.0);
+    line->SetLineColor(kRed + 1);
+    line->SetLineStyle(2);
+    line->SetLineWidth(3);
+    line->SetBit(kCanDelete);
+    line->Draw("SAME");
+}
+
 void SetProfileYRange(TProfile* p) {
     double minY = std::numeric_limits<double>::infinity();
     double maxY = -std::numeric_limits<double>::infinity();
@@ -115,12 +145,16 @@ void DrawAndSave(TH1* h, const std::string& outputPath) {
         h->Draw("COLZ");
     } else if (isProfile) {
         SetProfileYRange(static_cast<TProfile*>(h));
+        if (NeedsZeroLine(h)) IncludeZeroInYRange(h);
         h->Draw("PE");
+        if (NeedsZeroLine(h)) DrawZeroLine(h);
     } else {
         SetTH1YRange(h);
         h->Draw("HIST E");
     }
 
+    canvas.Modified();
+    canvas.Update();
     canvas.SaveAs(outputPath.c_str());
 }
 

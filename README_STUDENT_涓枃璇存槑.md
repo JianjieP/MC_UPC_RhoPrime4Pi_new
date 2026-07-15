@@ -128,14 +128,14 @@ Output ROOT: build/events_bose_1000.root
 non-Bose 样本只需要把 `generate_bose` 的第 6 个可选参数设为 `0`：
 
 ```bash
-./build/generate_bose build/grid_AuAu200_XnXn_smoke.root build/events_nonbose_1000.root 1000 12345 500 0
-./build/analyze_nonbose build/events_nonbose_1000.root build/analyze_nonbose_1000.root 1000
+./build/generate_bose build/grid_PbPb5360_Notag_smoke_split20_merged.root build/events_nonbose_5000000.root 5000000 12345 500 0
+./build_cmssw/analyze_nonbose build/events_nonbose_5000000.root build/analyze_nonbose_5000000.root 5000000
 ```
 
 比较 Bose 和 non-Bose：
 
 ```bash
-./build/compare_bose_modulations build/events_bose_1000.root build/events_nonbose_1000.root
+./build_cmssw/compare_bose_modulations build/events_bose_5000000.root build/events_nonbose_5000000.root
 ```
 
 ## 6. 事件生成模式怎么选

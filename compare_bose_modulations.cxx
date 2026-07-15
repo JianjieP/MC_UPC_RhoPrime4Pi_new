@@ -22,6 +22,8 @@ constexpr double kMSigma = 0.500;
 constexpr double kPi = 3.14159265358979323846;
 constexpr std::array<double, 7> kMassEdges{{0.55828, 0.9, 1.2, 1.5, 1.8, 2.2, 3.0}};
 constexpr std::array<double, 7> kPtEdges{{0.0, 0.02, 0.04, 0.06, 0.08, 0.12, 0.25}};
+constexpr int kBellBins = 720;
+constexpr long long kExactBellScanMaxPairs = 200000;
 
 struct Harmonics {
   long long count = 0;
@@ -121,7 +123,7 @@ double Correlation(const std::vector<AnglePair>& pairs, int n, double a, double 
   return pairs.empty() ? 0.0 : sum / pairs.size();
 }
 
-std::pair<double, double> SymmetricChshScan(const std::vector<AnglePair>& pairs, int n) {
+std::pair<double, double> SymmetricChshScanExact(const std::vector<AnglePair>& pairs, int n) {
   double best_s = 0.0;
   double best_theta = 0.0;
   for (int i = 0; i <= 180; ++i) {
@@ -137,6 +139,79 @@ std::pair<double, double> SymmetricChshScan(const std::vector<AnglePair>& pairs,
     }
   }
   return {best_s, best_theta};
+}
+
+int BellBin(double phi) {
+  const double wrapped = TVector2::Phi_mpi_pi(phi);
+  int bin = static_cast<int>((wrapped + kPi) * kBellBins / (2.0 * kPi));
+  return std::clamp(bin, 0, kBellBins - 1);
+}
+
+double BellBinCenter(int bin) {
+  return -kPi + (static_cast<double>(bin) + 0.5) * (2.0 * kPi / kBellBins);
+}
+
+std::pair<double, double> SymmetricChshScanBinned(const std::vector<AnglePair>& pairs, int n) {
+  if (pairs.empty()) return {0.0, 0.0};
+
+  std::vector<double> hist(static_cast<size_t>(kBellBins) * kBellBins, 0.0);
+  for (const auto& pair : pairs) {
+    const int ia = BellBin(pair.a);
+    const int ib = BellBin(pair.b);
+    hist[static_cast<size_t>(ia) * kBellBins + ib] += 1.0;
+  }
+
+  std::array<int, kBellBins> sign_a0{};
+  for (int ia = 0; ia < kBellBins; ++ia) {
+    sign_a0[ia] = SignCos(n, BellBinCenter(ia), 0.0);
+  }
+
+  double best_s = 0.0;
+  double best_theta = 0.0;
+  const double inv_count = 1.0 / static_cast<double>(pairs.size());
+  for (int i = 0; i <= 180; ++i) {
+    const double theta = (kPi / n) * i / 180.0;
+    std::array<int, kBellBins> sign_a2theta{};
+    std::array<int, kBellBins> sign_btheta{};
+    std::array<int, kBellBins> sign_bnegtheta{};
+    for (int ibin = 0; ibin < kBellBins; ++ibin) {
+      const double center = BellBinCenter(ibin);
+      sign_a2theta[ibin] = SignCos(n, center, 2.0 * theta);
+      sign_btheta[ibin] = SignCos(n, center, theta);
+      sign_bnegtheta[ibin] = SignCos(n, center, -theta);
+    }
+
+    double e_ab = 0.0;
+    double e_abp = 0.0;
+    double e_apb = 0.0;
+    double e_apbp = 0.0;
+    for (int ia = 0; ia < kBellBins; ++ia) {
+      const int sa0 = sign_a0[ia];
+      const int sa2 = sign_a2theta[ia];
+      const size_t row = static_cast<size_t>(ia) * kBellBins;
+      for (int ib = 0; ib < kBellBins; ++ib) {
+        const double w = hist[row + ib];
+        if (w == 0.0) continue;
+        e_ab += w * sa0 * sign_btheta[ib];
+        e_abp += w * sa0 * sign_bnegtheta[ib];
+        e_apb += w * sa2 * sign_btheta[ib];
+        e_apbp += w * sa2 * sign_bnegtheta[ib];
+      }
+    }
+    const double s = std::abs((e_ab + e_abp + e_apb - e_apbp) * inv_count);
+    if (s > best_s) {
+      best_s = s;
+      best_theta = theta;
+    }
+  }
+  return {best_s, best_theta};
+}
+
+std::pair<double, double> SymmetricChshScan(const std::vector<AnglePair>& pairs, int n) {
+  if (static_cast<long long>(pairs.size()) <= kExactBellScanMaxPairs) {
+    return SymmetricChshScanExact(pairs, n);
+  }
+  return SymmetricChshScanBinned(pairs, n);
 }
 
 SampleResults Analyze(const char* path, const char* label) {
@@ -257,10 +332,12 @@ void PrintHarmonics(const std::string& sample, const std::string& method,
   }
 }
 
-void PrintMethod(const SampleResults& sample, const char* name, const MethodResults& method) {
+void PrintMethod(const SampleResults& sample, const char* name, const MethodResults& method,
+                 bool include_bell) {
   PrintHarmonics(sample.label, name, "phi_a", method.phi_a);
   PrintHarmonics(sample.label, name, "phi_b", method.phi_b);
   PrintHarmonics(sample.label, name, "dphi", method.dphi);
+  if (!include_bell) return;
   for (int n = 1; n <= 2; ++n) {
     const auto [s, theta] = SymmetricChshScan(method.pairs, n);
     const double harmonic_proxy = 2.0 * std::sqrt(2.0) * std::abs(method.dphi.Cos(n) / 2.0);
@@ -269,13 +346,13 @@ void PrintMethod(const SampleResults& sample, const char* name, const MethodResu
   }
 }
 
-void Print(const SampleResults& sample) {
+void Print(const SampleResults& sample, bool include_bell) {
   std::cout << "SAMPLE," << sample.label << ",bose=" << sample.bose << ",events=" << sample.events
             << ",valid=" << sample.valid << ",best_matches_generator_tag_fraction="
             << (sample.valid ? static_cast<double>(sample.best_matches_tag) / sample.valid : 0.0)
             << '\n';
-  PrintMethod(sample, "generator_tag", sample.tagged);
-  PrintMethod(sample, "best_mass_no_truth", sample.best);
+  PrintMethod(sample, "generator_tag", sample.tagged, include_bell);
+  PrintMethod(sample, "best_mass_no_truth", sample.best, include_bell);
   PrintHarmonics(sample.label, "all_pairs_no_truth", "phi", sample.all_pairs_phi);
   PrintHarmonics(sample.label, "all_matchings_no_truth", "dphi", sample.all_matchings_dphi);
   for (size_t i = 0; i + 1 < kMassEdges.size(); ++i) {
@@ -301,18 +378,23 @@ void Print(const SampleResults& sample) {
 }  // namespace
 
 int main(int argc, char** argv) {
-  if (argc != 3) {
-    std::cerr << "Usage: compare_bose_modulations bose.root nonbose.root\n";
+  bool include_bell = true;
+  if (argc == 4 && std::string(argv[3]) == "--no-bell") {
+    include_bell = false;
+  } else if (argc != 3) {
+    std::cerr << "Usage: compare_bose_modulations bose.root nonbose.root [--no-bell]\n";
     return 2;
   }
   try {
     std::cout << std::setprecision(10);
     std::cout << "MOMENT_HEADER,sample,method,variable,n,2cos,error,2sin,error,count\n";
-    std::cout << "BELL_LIKE_HEADER,sample,method,n,S_symmetric_max,theta_at_max,"
-                 "harmonic_visibility_proxy,count\n";
+    if (include_bell) {
+      std::cout << "BELL_LIKE_HEADER,sample,method,n,S_symmetric_max,theta_at_max,"
+                   "harmonic_visibility_proxy,count\n";
+    }
     std::cout << "BINNED_HEADER,sample,axis,low,high,n,tagged_2cos,error,best_2cos,error,count\n";
-    Print(Analyze(argv[1], "bose"));
-    Print(Analyze(argv[2], "nonbose"));
+    Print(Analyze(argv[1], "bose"), include_bell);
+    Print(Analyze(argv[2], "nonbose"), include_bell);
     return 0;
   } catch (const std::exception& e) {
     std::cerr << "compare_bose_modulations: " << e.what() << '\n';
