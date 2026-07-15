@@ -1,5 +1,7 @@
 build/
 build_cmssw/
+clean_test/
+
 # Generated ROOT data products.
 *.root
 
@@ -13,3 +15,5 @@ review/logs/
 *.log
 
 *.png
+
+*.tgz

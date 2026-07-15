@@ -1,0 +1,44 @@
+# rho-prime UPC production card for CMS LHE generation.
+# Lines are parsed as key = value. Text after # or ; is ignored.
+
+# Collision setup
+beam_system = PbPb
+sqrt_snn_gev = 5360.0
+neutron_class = NoTag
+# For an XnXn production, use neutron_class = XnXn and point grid_file to
+# data/grid_PbPb5360_XnXn_prod.root in the runtime tarball.
+
+# Process
+process = gamma_A_to_rhoprime_A
+rhoprime_decay = rho0_sigma
+rho_decay = pi+_pi-
+sigma_decay = pi+_pi-
+
+# Generation phase space
+rapidity_min = -2.4
+rapidity_max = 2.4
+
+# Decay model (record only)
+bose_symmetrization = false
+rho_mass_gev = 0.77526
+rho_width_gev = 0.1491
+sigma_mass_gev = 0.500
+sigma_width_gev = 0.400
+
+# Event-weight mode
+# weighted: keep the generator event_weight in the LHE event record.
+# unweighted: write unit LHE weights; uses the unweighting settings below.
+event_mode = weighted
+unweighting_mode = 1
+unweighting_trials = 200000
+unweighting_safety_factor = 1.25
+
+# Runtime input
+# runcmsgrid.sh passes --grid explicitly. This key is a fallback/default for
+# direct rhoprime_lhe runs and documents the grid expected inside the tarball.
+grid_file = data/grid_PbPb5360_NoTag_prod.root
+
+# Generator numerics
+decay_norm_trials_per_mass = 20000
+output_compression_level = 1
+process_id = 81

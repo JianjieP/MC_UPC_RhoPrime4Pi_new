@@ -39,6 +39,12 @@ add_executable(generate_bose
 
 target_link_libraries(generate_bose PRIVATE rhoprime_core)
 
+add_executable(rhoprime_lhe
+  src/main_rhoprime_lhe.cxx
+)
+
+target_link_libraries(rhoprime_lhe PRIVATE rhoprime_core)
+
 add_executable(generate_grid
   src/main_rhoprime_dsigma_dy.cxx
 )
