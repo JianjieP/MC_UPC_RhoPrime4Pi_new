@@ -47,6 +47,22 @@ source /path/to/root/bin/thisroot.sh
 
 具体路径取决于你自己的 ROOT 安装位置。
 
+如果在 lxplus/CVMFS 上使用本目录里的 `build_cmssw_1511` 可执行文件，运行前必须加载同一个 CMSSW runtime：
+
+```bash
+cd /eos/cms/store/group/phys_heavyions/jianjie/CMSSW_15_1_1/src
+cmsenv
+cd ../../MC_UPC_RhoPrime4Pi_new
+```
+
+也可以在 `MC_UPC_RhoPrime4Pi_new` 目录里直接使用包装脚本：
+
+```bash
+./run_cmssw_1511.sh ./build_cmssw_1511/generate_bose --help
+```
+
+否则运行 `build_cmssw_1511/generate_bose` 时可能会报 `libtbb.so.12: cannot open shared object file` 或 `GLIBCXX_3.4.30 not found`。
+
 ## 3. 第一次编译
 
 进入解压后的目录，例如：
@@ -70,40 +86,40 @@ ls build/generate_grid_opt build/generate_bose build/analyze_bose build/analyze_
 
 ## 4. 最小跑通例子
 
-第一步：生成一个很小的 AuAu 200 GeV、XnXn 触发截面网格。
+第一步：生成一个很小的 PbPb 5.36 TeV、NoTag 触发截面网格。
 
 ```bash
-./build/generate_grid_opt PbPb 5360 NoTag build/grid_PbPb5360_Notag_smoke.root 40 100 1 4 1 20 400 1
+./build/generate_grid_opt PbPb 5360 NoTag build/grid_PbPb5360_NoTag_smoke.root 40 100 1 4 1 20 400 1
 ```
 
 参数含义按顺序是：
 
-- `AuAu`：碰撞系统，也可用 `PbPb`
-- `200`：sqrt(s_NN)，单位 GeV
-- `XnXn`：触发标签，也可用 `NoTag`
-- `build/grid_AuAu200_XnXn_smoke.root`：输出网格文件
-- `4`：质量 M 的 bin 数，测试时用小值，正式计算要加大
-- `10`：横动量网格每边 bin 数，测试时用小值
-- `6`：小 b 区域积分步数，测试时用小值
-- `8`：大 b 区域步长，单位 fm
-- `0.5`：快速度范围为 `-0.5 < y < 0.5`
-- `4`：y 的 bin 数
-- `40`：全局横向空间盒子大小，单位 fm
+- `PbPb`：碰撞系统，也可用 `AuAu`
+- `5360`：sqrt(s_NN)，单位 GeV
+- `NoTag`：触发标签，也可用 `XnXn`
+- `build/grid_PbPb5360_NoTag_smoke.root`：输出网格文件
+- `40`：质量 M 的 bin 数，测试时用小值，正式计算要加大
+- `100`：横动量网格每边 bin 数，测试时用小值
+- `1`：小 b 区域积分步数，测试时用小值
+- `4`：大 b 区域步长，单位 fm
+- `1`：快速度范围为 `-1 < y < 1`
+- `20`：y 的 bin 数
+- `400`：全局横向空间盒子大小，单位 fm
 - `1`：要求必须找到匹配的 UPC 概率 ROOT 文件；找不到就直接报错，避免误用近似结果
 
 成功时终端会打印一行 `RESULT ... output=...`。
 
-第二步：从网格生成 1000 个 Bose 对称事件。
+第二步：从已有生产网格生成 5,000,000 个 Bose 对称事件。测试时可以把事件数改成 `1000`。
 
 ```bash
-./build/generate_bose build/grid_PbPb5360_Notag_smoke_split20_merged.root build/events_bose_5000000.root 5000000 12345 500 1
+./run_cmssw_1511.sh ./build_cmssw_1511/generate_bose grids/grid_PbPb5360_NoTag_prod.root build/events_bose_5000000.root 5000000 12345 500 1
 ```
 
 参数含义：
 
-- `build/grid_AuAu200_XnXn_smoke.root`：上一步生成的网格
-- `build/events_bose_1000.root`：输出事件 ROOT 文件
-- `1000`：事件数
+- `grids/grid_PbPb5360_NoTag_prod.root`：输入网格
+- `build/events_bose_5000000.root`：输出事件 ROOT 文件
+- `5000000`：事件数；测试时可改成 `1000`
 - `12345`：随机数种子
 - `500`：每个质量点估计衰变权重归一化的 trial 数；测试用 500，正式可用 1000 或更高
 - `1`：打开 Bose symmetrization；如果填 `0` 就是 non-Bose 对照样本
@@ -111,31 +127,36 @@ ls build/generate_grid_opt build/generate_bose build/analyze_bose build/analyze_
 成功时会看到：
 
 ```text
-Generated Bose-symmetrized rho-prime events: 1000/1000
-Output ROOT: build/events_bose_1000.root
+Generated Bose-symmetrized rho-prime events: 5000000/5000000
+Output ROOT: build/events_bose_5000000.root
 ```
 
 第三步：分析事件文件，输出直方图。
 
 ```bash
-./build/analyze_bose build/events_bose_5000000.root build/analyze_bose_5000000.root 5000000
+./run_cmssw_1511.sh ./build_cmssw_1511/analyze_bose build/events_bose_5000000.root build/analyze_bose_5000000.root 5000000
 ```
 
-输出文件 `build/analyze_bose_1000.root` 里包含质量、快速度、pT、pair mass、角分布等直方图。
+输出文件 `build/analyze_bose_5000000.root` 里包含质量、快速度、pT、pair mass、角分布等直方图。
 
 ## 5. 生成 non-Bose 对照样本
 
 non-Bose 样本只需要把 `generate_bose` 的第 6 个可选参数设为 `0`：
 
 ```bash
-./build/generate_bose build/grid_PbPb5360_Notag_smoke_split20_merged.root build/events_nonbose_5000000.root 5000000 12345 500 0
-./build_cmssw/analyze_nonbose build/events_nonbose_5000000.root build/analyze_nonbose_5000000.root 5000000
+./run_cmssw_1511.sh ./build_cmssw_1511/generate_bose grids/grid_PbPb5360_NoTag_prod.root result/events_nonbose_5000000.root 5000000 12345 500 0
+./run_cmssw_1511.sh ./build_cmssw_1511/analyze_nonbose result/events_nonbose_5000000.root build_cmssw_1511/analyze_nonbose_5000000.root 5000000
+```
+
+```bash
+./run_cmssw_1511.sh ./build_cmssw_1511/generate_bose grids/grid_PbPb5360_NoTag_prod.root result/events_bose_5000000.root 5000000 12345 500 1
+./run_cmssw_1511.sh ./build_cmssw_1511/analyze_nonbose result/events_bose_5000000.root build_cmssw_1511/analyze_bose_5000000.root 5000000
 ```
 
 比较 Bose 和 non-Bose：
 
 ```bash
-./build_cmssw/compare_bose_modulations build/events_bose_5000000.root build/events_nonbose_5000000.root
+./run_cmssw_1511.sh ./build_cmssw_1511/compare_bose_modulations build/events_bose_5000000.root build/events_nonbose_5000000.root
 ```
 
 ## 6. 事件生成模式怎么选
@@ -224,6 +245,18 @@ ROOT 没有安装或环境没加载。先找到 ROOT 的 `thisroot.sh` 并 `sour
 root-config --version
 echo $ROOTSYS
 ```
+
+### `libtbb.so.12: cannot open shared object file`
+
+这是因为正在运行 `build_cmssw_1511` 里的程序，但当前 shell 没有加载 CMSSW_15_1_1 runtime。先执行：
+
+```bash
+cd /eos/cms/store/group/phys_heavyions/jianjie/CMSSW_15_1_1/src
+cmsenv
+cd ../../MC_UPC_RhoPrime4Pi_new
+```
+
+或者直接用 `./run_cmssw_1511.sh ./build_cmssw_1511/generate_bose ...`。
 
 ### `cannot load required UPC probability ROOT`
 

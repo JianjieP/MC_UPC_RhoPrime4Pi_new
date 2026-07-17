@@ -192,9 +192,9 @@ void ExportDirectory(TDirectory* dir, const std::string& outputDir,
 
 }  // namespace
 
-void export_analyze_bose_hists_png(
-    const char* inputFile = "/eos/user/j/jianjie/STARlight/CMSSW_15_1_0_patch3/src/MC_UPC_RhoPrime4Pi_new/build/analyze_bose_5000000.root",
-    const char* outputDir = "/eos/user/j/jianjie/STARlight/CMSSW_15_1_0_patch3/src/MC_UPC_RhoPrime4Pi_new/analyze_bose_5000000_hist_png") {
+void export_analyze_hists_png(
+    const char* inputFile = "/eos/cms/store/group/phys_heavyions/jianjie/MC_UPC_RhoPrime4Pi_new/result/analyze_nonbose_5000000.root",
+    const char* outputDir = "/eos/cms/store/group/phys_heavyions/jianjie/MC_UPC_RhoPrime4Pi_new/result/analyze_nonbose_5000000_hist_png") {
     gROOT->SetBatch(kTRUE);
     gStyle->SetOptStat(0);
     gStyle->SetPalette(kBird);

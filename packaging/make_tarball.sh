@@ -15,7 +15,7 @@ NAME="rhoprime_PbPb5360_NoTag_${VERSION}"
 OUTPUT="${PWD}/${NAME}.tgz"
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="${BUILD_DIR:-${PROJECT_ROOT}/build}"
+BUILD_DIR="${BUILD_DIR:-${PROJECT_ROOT}/build_cmssw_1511}"
 BINARY="${BUILD_DIR}/rhoprime_lhe"
 STAGE="$(mktemp -d)"
 

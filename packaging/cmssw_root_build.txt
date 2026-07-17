@@ -1,0 +1,14 @@
+source /cvmfs/cms.cern.ch/cmsset_default.sh
+cd /eos/cms/store/group/phys_heavyions/jianjie/CMSSW_15_1_1/src
+eval "$(scram runtime -sh)"
+
+cd /eos/cms/store/group/phys_heavyions/jianjie/MC_UPC_RhoPrime4Pi_new
+
+ROOT_BASE=$(readlink -f "$(dirname "$(root-config --libdir)")")
+
+cmake -S . -B build_cmssw_1511 \
+  -DROOT_DIR="${ROOT_BASE}/cmake" \
+  -DCMAKE_PREFIX_PATH="${ROOT_BASE}:${CMAKE_PREFIX_PATH}" \
+  -DCMAKE_BUILD_TYPE=Release
+
+cmake --build build_cmssw_1511 --target rhoprime_lhe -j 4

@@ -17,3 +17,12 @@ review/logs/
 *.png
 
 *.tgz
+
+crab_projects*/
+
+_pycache_/
+
+*.data
+*.d
+*.so
+*.pcm
