@@ -18,8 +18,8 @@ sigma_decay = pi+_pi-
 rapidity_min = -2.4
 rapidity_max = 2.4
 
-# Decay model (record only)
-bose_symmetrization = false
+# Decay model
+bose_symmetrization = true
 rho_mass_gev = 0.77526
 rho_width_gev = 0.1491
 sigma_mass_gev = 0.500

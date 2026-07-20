@@ -26,3 +26,5 @@ _pycache_/
 *.d
 *.so
 *.pcm
+
+result/
